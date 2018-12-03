@@ -1,8 +1,10 @@
 
-![Reptar Logo](./assets/reptar-logo.svg) #Reptar  
-###A lightweight, Python-native headless Web Browser with a Selenium-style API.
+![Reptar Logo](./assets/reptar-logo.svg) 
+# Reptar  
+### A lightweight, Python-native headless Web Browser with a Selenium-style API.
 ---
-Maintainers:  Camela Shell <camela.shell@adiservices.com> - CMS
+Maintainers:  
+>Camela Shell <camela.shell@adiservices.com> - CMS  
               Michael Connolly <michael.connolly@adiservices.com> - MPC
 
 An open-source project being developed by the AMS Group Information Systems department,
