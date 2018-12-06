@@ -1,5 +1,9 @@
 
-![Reptar Logo](./assets/reptar-logo.svg) 
+<p align= "center">
+  <img src = ./assets/reptar-logo.svg> <!-- *the off centeredness bothered me ._. *![Reptar Logo](./assets/reptar-logo.svg)--> 
+</p>
+
+
 # Reptar  
 ### A lightweight, Python-native headless Web Browser with a Selenium-style API.
 ---
