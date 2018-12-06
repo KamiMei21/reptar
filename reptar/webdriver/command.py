@@ -1,4 +1,4 @@
-'''
+"""
 Reptar - a headless Python-native webdriver
 2018
 
@@ -14,18 +14,18 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-'''
+"""
+from .remote.remote_connection import URI
+from .webelements import Document
 
 class Command(object):
     #defines constants for the standard WebDriver commands
-    
     STATUS = "status"
     NEW_SESSION = "newSession"
     GET_ALL_SESSIONS = "getAllSessions"
     DELETE_SESSION = "deleteSession"
     CLOSE = "close"
     QUIT = "quit"
-    GET = "get"
     GO_BACK = "goBack"
     GO_FORWARD = "goForward"
     REFRESH = "refresh"
@@ -55,8 +55,6 @@ class Command(object):
     SWITCH_TO_FRAME = "switchToFrame"
     SWITCH_TO_PARENT_FRAME = "switchToParentFrame"
     GET_ACTIVE_ELEMENT = "getActiveElement"
-    GET_CURRENT_URL = "getCurrentUrl"
-    GET_PAGE_SOURCE = "getPageSource"
     GET_TITLE = "getTitle"
     EXECUTE_SCRIPT = "executeScript"
     GET_ELEMENT_TEXT = "getElementText"
@@ -79,15 +77,14 @@ class Command(object):
     MINIMIZE_WINDOW = "minimizeWindow"
     GET_ELEMENT_LOCATION = "getElementLocation"
 
-    # Alerts
+    #Alerts
     DISMISS_ALERT = "dismissAlert"
     ACCEPT_ALERT = "acceptAlert"
     SET_ALERT_VALUE = "setAlertValue"
     GET_ALERT_TEXT = "getAlertText"
     SET_ALERT_CREDENTIALS = "setAlertCredentials"
 
-
-    # HTML 5
+    #HTML 5
     EXECUTE_SQL = "executeSql"
 
     GET_LOCATION = "getLocation"
@@ -110,3 +107,56 @@ class Command(object):
     SET_SESSION_STORAGE_ITEM = "setSessionStorageItem"
     CLEAR_SESSION_STORAGE = "clearSessionStorage"
     GET_SESSION_STORAGE_SIZE = "getSessionStorageSize"
+
+    @staticmethod
+    def find_referer(document):
+        #TODO:  Have this referer behavior upon encountering a query string 
+        #       configurable as a switch: 'SEND', 'PARTIAL', or 'DROP'  --MPC
+        if (not document.address.query) and (not document.address.fragment):  
+            return document.address.absolute()
+        else:  return ''
+
+    @staticmethod
+    def traverse_anchor(fragment):
+        pass
+
+    @staticmethod
+    def get(url, context, **kwargs):
+        timeout = kwargs["timeout"] if "timeout" in kwargs else 60
+        verify = kwargs["verify"] if "verify" in kwargs else False
+        traversal = kwargs["traversal"] if "traversal" in kwargs else False
+        url = url
+        session = context.session
+        document = context.window.curdoc
+        req = None
+        headers = {}
+        uri = URI(url)
+    
+        #Did someone really just try to pass us a #fragment?
+        if (uri.fragment != "") and (uri.absolute() == document.address.absolute()):
+            traverse_anchor(uri.fragment)
+        else:
+            if document.address and traversal:
+                headers["Referer"] = find_referer(document)
+            if document.post_data:
+                headers["Content-Type"] = document.post_content_type
+                data = document.post_data["data"]
+            else:  data = None
+            
+            req = session.get(str(uri), headers=headers, verify=verify, timeout=timeout, params=data)
+            #TODO:  More robust Exception value  --MPC
+            if req.status_code == 404:  raise Exception
+            else:
+                context.window.newdoc = Document(content=req.content, content_parse_mode=context.parse_mode, address=uri)
+                context.cache.append(context.window.newdoc)
+                
+        context.sync.set()
+    
+    @staticmethod
+    def get_page_source(context):
+        context.sync.wait()
+        return str(context.window.curdoc.content)
+        
+    @staticmethod
+    def get_current_url(context):
+        return str(context.window.curdoc.address)

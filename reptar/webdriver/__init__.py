@@ -1,4 +1,4 @@
-'''
+"""
 Reptar - a headless Python-native webdriver
 2018
 
@@ -14,8 +14,6 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-'''
+"""
 
-from .webdriver import WebDriver as Remote
-from .common.action import ActionChains
-from .common.proxy import Proxy
+from .webdriver import WebDriver as Reptar

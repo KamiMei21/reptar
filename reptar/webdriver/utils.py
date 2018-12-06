@@ -1,4 +1,4 @@
-'''
+"""
 Reptar - a headless Python-native webdriver
 2018
 
@@ -14,18 +14,20 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-'''
-
+"""
 import logging
 import os
 import tempfile
 import zipfile
 
+
 LOGGER = logging.getLogger(__name__)
+
 
 def unzip_to_temp_dir(zip_file_name):
     
-    if not zip_file_name or not os.path.exists(zip_file_name): #unzip zipfile to a temporary directory
+    #unzip zipfile to a temporary directory
+    if not zip_file_name or not os.path.exists(zip_file_name):
         return None
 
     zf = zipfile.ZipFile(zip_file_name)
@@ -40,7 +42,8 @@ def unzip_to_temp_dir(zip_file_name):
     try:
         # Create directories that don't exist
         for zip_name in zf.namelist():
-            # We have no knowledge on the os where the zipped file was created, so we restrict to zip files with paths without charactor "\" and "/".
+            # We have no knowledge on the os where the zipped file was created, 
+            #so we restrict to zip files with paths without '\' and '/'
             name = (zip_name.replace("\\", os.path.sep).
                     replace("/", os.path.sep))
             dest = os.path.join(tempdir, name)
@@ -50,7 +53,8 @@ def unzip_to_temp_dir(zip_file_name):
 
         # Copy files
         for zip_name in zf.namelist():
-            # We have no knowledge on the os where the zipped file was created, so we restrict to zip files with paths without charactor "\" and "/".
+            # We have no knowledge on the os where the zipped file was created, 
+            #so we restrict to zip files with paths without '\' and '/'
             name = (zip_name.replace("\\", os.path.sep).
                     replace("/", os.path.sep))
             dest = os.path.join(tempdir, name)
