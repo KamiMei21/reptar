@@ -15,46 +15,39 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
-import base64
-import logging
-import platform
 import socket
 import string
 import urllib
 
 import requests
 
+from reptar.common.useragent import user_agent_strings
 
-LOGGER = logging.getLogger(__name__)
-
-
-class RemoteConnection(requests.Session):
-    _timeout = socket._GLOBAL_DEFAULT_TIMEOUT
-
-    @classmethod
-    def get_timeout(cls):
-        if cls._timeout == socket._GLOBAL_DEFAULT_TIMEOUT:  return None
-        else:  return cls._timeout
-
-    @classmethod
-    def set_timeout(cls):
-        cls._timeout = _timeout
-
-    @classmethod
-    def reset_timeout(cls):
-        cls._timeout = socket._GLOBAL_DEFAULT_TIMEOUT
-
-    @classmethod
-    def get_remote_connection_headers(cls, parsed_url, keep_alive=False):
-        #get headers for remote request
-        pass
-
-
-    def __init__(self):
-        super().__init__()
+#Wrapper class for Requests
+class RemoteConnection(object):
+    def __init__(self, parent=None, user_agent="BSD Lynx"):
+        self.parent = parent
+        self.user_agent = user_agent_strings[user_agent]
+        self.session = requests.Session()
         requests.packages.urllib3.disable_warnings()
+        self.session.headers.update({"User-Agent": self.user_agent, "Accept": "image/gif,image/jpeg,image/pjpeg,application/x-ms-application,application/xaml+xml,application/x-ms-xbap,*/*", "Accept-Language": "en-US,en;q=0.5", "Cache-Control": "no-cache"})
 
+    def close(self):
+        self.session.close()
+        
+    def get(self, url, timeout, verify, headers, params):
+        if not headers:  headers=self.session.headers
+        return self.session.get(url, timeout=timeout, verify=verify, headers=headers, params=params)
+        
+    @property
+    def headers(self):
+        return self.session.headers
+        
+    def request(self, method, url, timeout, verify, headers, data, files):
+        if not headers:  headers=self.session.headers
+        return self.session.request(method, url, timeout=timeout, verify=verify, headers=headers, data=data, files=files)
 
+#Lovingly borrowed from Lynx - please wrap, don't modify
 class URI(object):    
     def __init__(self, uri_string):
         uri = urllib.parse.urlparse(uri_string)
@@ -68,11 +61,12 @@ class URI(object):
             if self.protocol == "http":  self.port = 80
             if self.protocol == "https":  self.port = 443
     
+    @property
     def absolute(self):
         return ''.join([self.protocol, "://", self.URL, self.URN])
     
     def urljoin(self, url):
-        return urllib.parse.urljoin(self.absolute(), url, allow_fragments=False)
+        return urllib.parse.urljoin(self.absolute, url, allow_fragments=False)
         
     def __repr__(self):
         return ''.join([self.protocol, "://", self.URL, ':' , str(self.port), self.URN, self.query, self.fragment])

@@ -15,203 +15,146 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
-
-import base64
-import hashlib
 import os
-import pkgutil
-import warnings
-import zipfile
 
-from io import BytesIO as IOStream 
+from time import sleep
+from io import StringIO
 from bs4 import BeautifulSoup
 
 from reptar.common.exceptions import WebDriverException
+from .remote.remote_connection import URI
 
 
-
-"""*********************************************
-    ***HTML DOCUMENT OBJECT***    
-*********************************************"""    
+#Lovingly borrowed from Lynx - please wrap, don't modify
 class Document(object):
-    def __init__(self, content=None, content_parse_mode="lxml", post_content_type="", post_data={"data": '', "files": ''}, address=""):
-        self.line_count        = 0
-        self.content           = BeautifulSoup(content, content_parse_mode) if content else ''
-        self.post_content_type = post_content_type
-        self.post_data         = post_data
-        self.address           = address
-        self.focus_element     = None
+    def __init__(self, parent, parser="html5lib", content=None, address=None):
+        self.parent = parent
+        self.parser = parser
+        self.post_content_type = ''
+        self.post_data = {"data": [], "files": []}
+        self.focus_element = None
         
-    @staticmethod
-    def are_different(doc1, doc2):
-        if (not isinstance(doc1, Document)) or (not isinstance(doc2, Document)):
+        if (not address) or (isinstance(address, URI)):  self.address = address
+        else:  self.address = URI(address)
+        
+        if content:  self.content = BeautifulSoup(content, parser)
+        else:  self.content = content
+        
+    #Method to send a request up the chain to parent
+    def bubble_option(self, func, params):
+        try:
+            getattr(self, func)(**params)
+        except:
+            self.parent.bubble_option(func, params)
+        
+    #Do all the house-keeping required to present a proper data object to the server
+    def pack_form(self):
+        self.focus_element = self.focus_element.recover_context()
+        self.focus_element = self.focus_element.find_parent("form")
+        method = self.focus_element.get("method", "GET")
+        selector = ','.join("{}[name]".format(i) for i in ("input", "button", "textarea", "select"))
+        for tag in self.focus_element.select(selector):
+            name = tag.get("name")
+        
+            if tag.name == "input":
+                if tag.get("type") in ("radio","checkbox"):
+                    if "checked" not in tag.attrs:  continue
+                    value = tag.get("value", "on")
+                else:
+                    value = tag.get("value", "")
+            
+                if tag.get("type") == "file":
+                    if not value:  continue
+                    if isinstance(value, str):  value = open(value, "rb")
+                    self.post_data["files"][name] = value
+                else:
+                    self.post_data["data"].append((name, value))
+            
+            if tag.name == "button":
+                if tag.get("type", "") in ("button", "reset"):  continue
+                else:  self.post_data["data"].append((name, tag.get("value", "")))
+        
+            if tag.name == "textarea":
+                self.post_data["data"].append((name, tag.text))
+        
+            if tag.name == "select":
+                options = tag.select("option")
+                selected_values = [i.get("value", i.text) for i in options if "selected" in i.attrs]
+            
+                if "multiple" in tag.attrs:
+                    for value in selected_values:
+                        self.post_data["data"].append((name, value))
+                elif selected_values:
+                    self.post_data["data"].append((name, selected_values[-1]))
+                elif options:
+                    self.post_data["data"].append((name, options[0].get("value", options[0].text)))
+                    
+        if (not self.post_data["files"]) and method.lower() != "put":
+            self.post_content_type = "application/x-www-form-urlencoded"
+        else:
+            self.post_content_type = "multipart/form-data"
+      
+#Lovingly borrowed from Lynx - please wrap, don't modify
+class Window(object):
+    def __init__(self, parent):
+        self.parent = parent
+        self.curdoc = Document(self)
+        self.newdoc = None
+        self.cache = []
+        self.cursor = (0,0)
+        self.buffer = None
+        
+    #Method to send a request up the chain to parent
+    def bubble_option(self, func, params):
+        try:
+            getattr(self, func)(**params)
+        except:
+            self.parent.bubble_option(func, params)
+        
+    def spawn_doc(self, address, content, parser="html5lib"):
+        if self.newdoc:  self.cache.append(self.newdoc)
+        self.newdoc = Document(parent=self, parser=parser, content=content, address=address)
+        
+    def is_different(self):
+        if (not isinstance(self.curdoc, Document)) or (not isinstance(self.newdoc, Document)):
             return True
-        if (doc1.address != doc2.address):
+        if (self.curdoc.address != self.newdoc.address):
             return True
-        if (doc1.post_data != doc2.post_data):
+        if (self.curdoc.post_data != self.newdoc.post_data):
             return True
         
         return False
         
-class Window(object):
-    def __init__(self, resolution=(1280, 720), font_size=12, zoom_level=100, curdoc=None):
-        self.resolution = resolution
-        self.font_size  = font_size
-        self.zoom_level = zoom_level
-        self.cursor     = 0
-        self.buffer     = None
-        self.curdoc     = curdoc or Document()
-        self.newdoc     = None
+    def swap_doc(self):
+        self.curdoc = self.newdoc
+        self.buffer = StringIO(str(self.curdoc.content)).readlines()
+        self.newdoc = None
 
+#Wrapper class for BeautifulSoup tag elements
 class WebElement(object):
-    def __init__(self, parent, id_):
-        self._parent = parent
-        self._id = id_
-
-    def __repr__(self):
-        #?
-        pass
-
-    #this element's 'tagName' property
-    @property
-    def tag_name(self):
-        pass
-
-    #the text of the element
-    @property
-    def text(self):
-        pass
-    
-    #clicks the element
-    def click(self):
-        pass
-
-    #submits a form
-    def submit(self):
-        pass
-
-    #clear text if it's a text entry element
-    def clear(self):
-        pass
-
-    #gets given attribute or property of the element
-    def get_attribute(self,name): 
-        pass
-    
-    #returns whether element is selected
-    def is_selected(self):
-        pass
-
-    #returns whether the element is enabled
-    def is_enabled(self): 
-        pass
-
-    #find element within this element's chilcdren by ID
-    def find_element_by_id(self, id_):
-        return self.find_element(id_)
-
-    #finds a list of elements within this element's children by ID
-    def find_elements_by_id(self, id_):
-        return self.find_elements(id_)
-
-    #finds elements within this element's children by name
-    def find_element_by_name(self, name):
-        return self.find_element(name)
-     
-    #finds a list of elements within this element's children by name
-    def find_elements_by_name(self, name):
-        return self.find_elements(name)
+    def __init__(self, parent, element, selector):
+        self.parent = parent
+        self.element = element
+        self.selector = selector
         
-    #finds element within this element's children by visible link text
-    def find_element_by_link_text(self, link_text):
-        return self.find_element(link_text)
-
-    #finds a list of elements within this element's children 
-    #by visible link text
-    def find_elements_by_link_text(self, link_text):
-        return self.find_elements(link_text)
-    
-    #finds element within this element's children by partially visible link text
-    def find_element_by_partial_link_text(self, link_text):
-        return self.find_element(link_text)
-    
-    #finds a list of elements within this element's children by link text
-    def find_elements_by_partial_link_text(self, link_text):
-        return self.find_elements(link_text)
-    
-    #finds element within this element's children by tag name
-    def find_element_by_tag_name(self, name):
-        return self.find_element(name)
-    
-    #finds a list of elements within this element's children by tag name
-    def find_elements_by_tag_name(self, name):
-        return self.find_elements(name)
-    
-    #finds element by xpath
-    def find_element_by_xpath(self, xpath):
-        return self.find_element(xpath)
-    
-    #finds elements within the element by xpath
-    def find_elements_by_xpath(self, xpath):
-        return self.find_elements(xpath)
-    
-    #finds element within this element's children by class name
-    def find_element_by_class_name(self, name):
-        return self.find_element(name)
-    
-    #finds a list of elements within this element's childrn by class name
-    def find_elements_by_class_name(self, name):
-        return self.find_elements(name)
-    
-    def send_keys(self, *value):
-        pass
-
-    @property
-    def location(self):
-        pass
-
-    #saves screenshot of the current element to PNG.
-    @property
-    def screenshot(self, filename):
-        pass
-
-    #Internal reference to the WebDriver instance this element was found from
-    @property
-    def parent(self):
-        return self._parent
-
-    #Internal ID
-    @property
-    def id(self):
-        return self._id
-
-    
-    def __eq__(self):
-        #?
-        pass
-
-    def __ne__(self):
-        #?
-        pass
-
-    #executes a command against the underlying HTML element
-    def _execute(self, command, params=None):
-        if not params:
-            params = {}
-        params["id"] = self._id
-        pass
-
-    #find an element given a By strategy and locator
-    def find_element(self, by=None, value=None):
-        pass
-
-    #find elements given a By strategy and locator
-    def find_elements(self, by=None, value=None):
-        pass
-
-    def __hash__(self):
-        #?
-        pass
-
-    def _upload(self):
-        pass
+    def recover_context(self):
+        return self.parent.content.select(self.selector)[0]
+        
+    def send_keys(self, keys):
+        #TODO:  Currently only expects an "input" type form element
+        element = self.recover_context()
+        element["value"] = keys
+        sleep((0.17 * len(keys)))
+        self.element = element
+        
+    def submit(self):
+        self.parent.pack_form()
+        method = self.parent.focus_element.get("method")
+        action = self.parent.focus_element.get("action")
+        url = self.parent.address.urljoin(action)
+        
+        if method is "GET":  self.parent.bubble_option("get", {"uri": url})
+        else:  self.parent.bubble_option("post", {"uri": url})
+        
+    def __repr__(self):
+        return str(self.element)
